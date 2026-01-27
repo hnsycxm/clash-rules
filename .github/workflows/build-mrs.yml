@@ -1,0 +1,24 @@
+name: Build MRS
+on: [push, workflow_dispatch]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions: {contents: write}
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          SOURCE=domain.txt
+          echo "Converting  $ SOURCE"
+          python converter.py -i " $ SOURCE" -o rules.yaml
+          wget -q https://github.com/MetaCubeX/Clash.Meta/releases/download/v1.13.0/clash.meta-linux-amd64.tar.gz
+          tar -xzf clash.meta-linux-amd64.tar.gz
+          ./clash.meta -rule-set-compile -input rules.yaml -output rules.mrs
+          ls -lh rules.mrs
+      - uses: actions/upload-artifact@v4
+        with: {name: mrs, path: rules.mrs}
+      - run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add rules.mrs
+          git commit -m "Update" || exit 0
+          git push
