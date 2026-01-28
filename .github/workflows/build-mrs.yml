@@ -7,28 +7,35 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: 🔧 转换域名
+      - name: 🔧 生成 YAML 规则集
         run: |
-          python converter.py
-          echo "🔍 验证 YAML 内容:"
-          head -5 rules.yaml
-          if [ ! -s rules.yaml ]; then
-            echo "::error::YAML 为空！"
+          if [ ! -f domain.txt ]; then
+            echo "::error::❌ 未找到 domain.txt！"
+            ls -l
             exit 1
           fi
+          python -c '''
+import sys
+with open("domain.txt") as f:
+  domains = [f"  - '+.{line.strip().lstrip('*.')}'" 
+             for line in f 
+             if line.strip() and not line.startswith(("#","//")) and "." in line]
+if not domains:
+  print("❌ 无有效域名", file=sys.stderr)
+  sys.exit(1)
+with open("rules.yaml","w") as o:
+  o.write("payload:\n" + "\n".join(domains))
+print(f"✅ 生成 {len(domains)} 条规则", file=sys.stderr)
+'''
+          head -3 rules.yaml
       
-      - name: ⬇️ 获取 Clash.Meta
+      - name: 🐳 用 Docker 编译 MRS（终极方案）
         run: |
-          wget -q https://github.com/MetaCubeX/Clash.Meta/releases/download/v1.13.0/Clash.Meta-linux-amd64.tar.gz
-          tar -xzf Clash.Meta-linux-amd64.tar.gz
-          chmod +x clash
-          ./clash -version
-      
-      - name: 🔐 编译 MRS（精确命令）
-        run: |
-          ./clash rule-set compile \
-            --input rules.yaml \
-            --output rules.mrs
+          docker run --rm -v  $ (pwd):/work -w /work \
+            ghcr.io/metacubex/clash-meta:latest \
+            rule-set compile \
+              --input rules.yaml \
+              --output rules.mrs
           ls -lh rules.mrs
           file rules.mrs
       
