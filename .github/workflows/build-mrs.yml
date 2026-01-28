@@ -1,49 +1,50 @@
 name: Build MRS
-on: [push, workflow_dispatch]
+on:
+  push:
+    paths:
+      - domain.txt
+  workflow_dispatch: {}
 jobs:
   build:
     runs-on: ubuntu-latest
-    permissions: {contents: write}
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
-      
-      - name: 🔧 生成 YAML 规则集
+      - name: Generate rules.yaml
         run: |
           if [ ! -f domain.txt ]; then
-            echo "::error::❌ 未找到 domain.txt！"
-            ls -l
+            echo "::error::domain.txt not found"
+            ls -la
             exit 1
           fi
-          python -c '''
+          python3 <<'PYEOF'
 import sys
 with open("domain.txt") as f:
   domains = [f"  - '+.{line.strip().lstrip('*.')}'" 
              for line in f 
              if line.strip() and not line.startswith(("#","//")) and "." in line]
 if not domains:
-  print("❌ 无有效域名", file=sys.stderr)
+  print("::error::No valid domains", file=sys.stderr)
   sys.exit(1)
 with open("rules.yaml","w") as o:
-  o.write("payload:\n" + "\n".join(domains))
-print(f"✅ 生成 {len(domains)} 条规则", file=sys.stderr)
-'''
+  o.write("payload:\n" + "\n".join(domains) + "\n")
+print(f"::notice::Generated {len(domains)} rules", file=sys.stderr)
+PYEOF
           head -3 rules.yaml
-      
-      - name: 🐳 用 Docker 编译 MRS（终极方案）
+      - name: Compile MRS via Docker
         run: |
-          docker run --rm -v  $ (pwd):/work -w /work \
+          docker run --rm -v " $ (pwd):/work" -w /work \
             ghcr.io/metacubex/clash-meta:latest \
-            rule-set compile \
-              --input rules.yaml \
-              --output rules.mrs
+            rule-set compile --input rules.yaml --output rules.mrs
           ls -lh rules.mrs
-          file rules.mrs
-      
       - uses: actions/upload-artifact@v4
-        with: {name: mrs, path: rules.mrs}
-      
-      - run: |
-          git config user.name github-actions
-          git config user.email github-actions@github.com
+        with:
+          name: rules-mrs
+          path: rules.mrs
+      - name: Commit MRS
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
           git add rules.mrs
-          git diff --quiet rules.mrs || (git commit -m "Update" && git push)
+          git diff --quiet rules.mrs || git commit -m "Update rules.mrs" && git push
