@@ -6,15 +6,37 @@ jobs:
     permissions: {contents: write}
     steps:
       - uses: actions/checkout@v4
-      - run: python converter.py
-      - run: |
-          wget -q https://github.com/MetaCubeX/Clash.Meta/releases/download/v1.13.0/clash.meta-linux-amd64.tar.gz
-          tar -xzf clash.meta-linux-amd64.tar.gz
-          ./clash.meta -rule-set-compile -input rules.yaml -output rules.mrs
+      
+      - name: 🔧 转换域名
+        run: |
+          python converter.py
+          echo "🔍 验证 YAML 内容:"
+          head -5 rules.yaml
+          if [ ! -s rules.yaml ]; then
+            echo "::error::YAML 为空！"
+            exit 1
+          fi
+      
+      - name: ⬇️ 获取 Clash.Meta
+        run: |
+          wget -q https://github.com/MetaCubeX/Clash.Meta/releases/download/v1.13.0/Clash.Meta-linux-amd64.tar.gz
+          tar -xzf Clash.Meta-linux-amd64.tar.gz
+          chmod +x clash
+          ./clash -version
+      
+      - name: 🔐 编译 MRS（精确命令）
+        run: |
+          ./clash rule-set compile \
+            --input rules.yaml \
+            --output rules.mrs
+          ls -lh rules.mrs
+          file rules.mrs
+      
       - uses: actions/upload-artifact@v4
         with: {name: mrs, path: rules.mrs}
+      
       - run: |
           git config user.name github-actions
           git config user.email github-actions@github.com
           git add rules.mrs
-          git diff --quiet rules.mrs || (git commit -m "Update rules.mrs" && git push)
+          git diff --quiet rules.mrs || (git commit -m "Update" && git push)
